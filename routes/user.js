@@ -20,8 +20,8 @@ const signupBody = zod.object({
     ,
 
     lastName:zod
-    .string().min(6, "LastName should be at least 6 letters")
-    .max(20, "LastName cannot be more than 20 letters long")
+    .string().min(6, "lastName should be at least 6 letters")
+    .max(20, "lastName cannot be more than 20 letters long")
     ,
     password:zod
     .string().min(6, "Password should be at least 6 letters")
@@ -38,9 +38,26 @@ const updateBody = zod.object({
     .max(20, "Lastname cannot be more than 20 letters long"),
 })
 
-router.get("/",(req,res)=>{
-    res.json({message:"User router"})
+router.get("/",async(req,res)=>{
+    try {
+        const allUsers = await Account.find({}).populate('userId');
+
+        return res.json(allUsers.map((account)=>(
+            {
+            accountId: account._id,
+            userId: account.userId ? account.userId._id : null,
+            firstName: account.userId ? account.userId.firstName : null,
+            }
+        )));
+    } catch (error) {
+        console.log(error)
+        return res.status(400).json({message:"Error in fetching users"})
+    }
+    
 })
+
+
+
 
 router.post("/signUP",async(req,res)=>{
     try {
@@ -55,13 +72,14 @@ router.post("/signUP",async(req,res)=>{
 
     const findUser =await User.find({username,firstName});
     if(findUser.length>0){
-        return res.json({message:"User already exists"});
+        return res.status(400).json({message:"User already exists"});
     }
     else{
         const hashedpassword = await bcrypt.hash(password,10)
         const user = await User.create({username,firstName,lastName,password:hashedpassword});
         const token = jwt.sign({userId:user._id},JWT_SECRET);
-        res.setHeader('Authorization',`Bearer ${token}`);
+        res.cookie("authToken",token)
+        // res.setHeader('Authorization',`Bearer ${token}`);
         await Account.create({
             userId:user._id,
             balance:Math.random()*50000
@@ -69,7 +87,7 @@ router.post("/signUP",async(req,res)=>{
         return res.json({message:"User created successfully",token:token});
     }
     } catch (error) {
-        return res.json({error:error})
+        return res.status(402).json({error:error})
     }
 })
 
@@ -77,7 +95,7 @@ router.post("/signin",async(req,res)=>{
    try {
     const {username,password} = req.body;
     if(!username || !password){
-        return res.json({message:"Enter proper details"})
+        return res.status(400).json({message:"Enter proper details"})
     }
      if(true){
         const user = await User.findOne({username:req.body.username});
@@ -86,20 +104,21 @@ router.post("/signin",async(req,res)=>{
         }
         const solvedPassword = await bcrypt.compare(req.body.password,user.password);
         if(!solvedPassword){
-            return res.json({message:"Incorrect password"})
+            return res.status(401).json({message:"Incorrect password"})
         }else{
             const token = jwt.sign({userId:user._id},JWT_SECRET);
 
-            res.setHeader('Authorization',`Bearer ${token}`);
+            // res.setHeader('Authorization',`Bearer ${token}`);
+            res.cookie("authToken",token)
             console.log(res.getHeader("Authorization"));
-            return res.json({token:token});
+            return res.json({message:"Logged in",token:token});
         }
         
     }
     }   
     catch (error) {
         console.error("Error in signin route:");
-    return res.json({message:"Error in signin"})
+    return res.status(401).json({message:"Error in signin"})
     
    }
 })
@@ -130,34 +149,40 @@ async(req,res)=>{
 )
 
 router.get('/bulk',authMiddleware,async(req,res)=>{
-    const search = req.query.search||"";
+    try {
+        const search = req.query.search||"";
     if(!search){
-        return res.json({message:"Enter name to filter"})
+        return res.status(300).json({message:"Enter name to filter"})
     }
     const foundUsers = await User.find({
         $or:[
             {
                 firstName:{
-                    '$regex':search
+                    '$regex':search,
+                    '$options':'i'
                 }
             },{
                 lastName:{
-                    '$regex':search
+                    '$regex':search,
+                    '$options':'i'
                 }
             }
         ]
     });
-
+    const foundAccounts = await Account.find({ userId: { $in: foundUsers.map(user => user._id) } });
     res.json({
         foundUsers:foundUsers.map((user=>(
            {
-            username: user.username,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            _id: user._id 
+            name: user.firstName,
+            id: user._id,
+            account: foundAccounts.find(account => account.userId.toString() === user._id.toString())?._id || null
            }
         )))
     })
+    } catch (error) {
+        return res.status(400).json({error:error})
+    }
 })
+
 
 module.exports = router;

@@ -1,6 +1,6 @@
 const { default: mongoose } = require("mongoose");
 //avl6zWF21EospzDL
-
+// mongoose.set('strictPopulate', false);
 const userScheme = new mongoose.Schema({
     firstName:{
         type:String,

@@ -4,7 +4,7 @@ const userRouter = require("./user.js");
 const accountRouter = require("./account.js");
 
 router.get("/index",(req,res)=>{
-    res.json({message:"OWOkring routre"})
+    res.json({message:"backend working as expected"})
     console.log("Router wwokring")
 })
 
